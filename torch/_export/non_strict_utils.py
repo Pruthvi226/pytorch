@@ -13,7 +13,6 @@ from typing import Any, cast, TYPE_CHECKING, TypeGuard
 
 import torch
 import torch.utils._pytree as pytree
-from torch._custom_class_base import CustomClassBase
 from torch._dynamo.source import (
     AttrSource,
     GetItemSource,
@@ -27,6 +26,7 @@ from torch._export.utils import _fakify_params_buffers
 from torch._guards import Source
 from torch._library.fake_class_registry import FakeScriptObject
 from torch._library.opaque_object import is_opaque_value
+from torch._opaque_base import OpaqueBase
 from torch._subclasses.fake_tensor import FakeTensorMode
 from torch.export import Constraint
 from torch.export.dynamic_shapes import (
@@ -286,11 +286,11 @@ def _create_symbolic_context_for_tensor(t, source, t_constraints, sources, mode)
                     inner_contexts[attr] = _create_symbolic_context_for_tensor(
                         inner_value, inner_source, t_constraints, sources, mode
                     )
-                case CustomClassBase():
+                case OpaqueBase():
                     pass
                 case unexpected:
                     raise AssertionError(
-                        f"expected Tensor or CustomClassBase, got {type(unexpected)}"
+                        f"expected Tensor or OpaqueBase, got {type(unexpected)}"
                     )
 
         symbolic_context = SubclassSymbolicContext(

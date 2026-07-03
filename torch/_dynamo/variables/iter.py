@@ -83,12 +83,12 @@ class ItertoolsVariable(VariableTracker):
     def get_real_python_backed_value(self) -> Any:
         return self.value
 
-    def getattro_impl(
+    def var_getattr(
         self, tx: "InstructionTranslatorBase", name: str
     ) -> "VariableTracker":
         if self.value is itertools.chain and name == "from_iterable":
             return ItertoolsVariable(_CHAIN_FROM_ITERABLE)
-        return super().getattro_impl(tx, name)
+        return super().var_getattr(tx, name)
 
     def call_function(
         self,

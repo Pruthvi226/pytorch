@@ -287,14 +287,14 @@ struct MPSKernelCache {
     __block MPSCachedKernel* cachedKernel = nil;
     MPSCacheKey hash = std::hash<std::string>{}(key);
     dispatch_sync_with_rethrow(serialQueue_, ^() {
-      auto it = cache_.find(hash);
-      if (it != cache_.end()) {
-        auto& entry = it->second;
+      if (cache_.contains(hash)) {
+        auto& entry = cache_.at(hash);
         TORCH_INTERNAL_ASSERT_DEBUG_ONLY(key == entry.key_, "Key collision in the MPS cached kernel!\n");
         cachedKernel = entry.cachedKernel_;
       } else {
         cachedKernel = createCacheBlock();
-        cache_.try_emplace(hash, key, cachedKernel);
+        CacheEntry entry(key, cachedKernel);
+        cache_.emplace(hash, entry);
       }
     });
     return cachedKernel;
@@ -309,9 +309,8 @@ struct MPSKernelCache {
 
     MPSCacheKey hash = std::hash<std::string>{}(key);
     dispatch_sync_with_rethrow(serialQueue_, ^() {
-      auto it = cache_.find(hash);
-      if (it != cache_.end()) {
-        auto& entry = it->second;
+      if (cache_.count(hash) != 0) {
+        auto& entry = cache_.at(hash);
         TORCH_INTERNAL_ASSERT_DEBUG_ONLY(key == entry.key_, "Key collision in the MPS cached kernel!\n");
         cachedKernel = entry.cachedKernel_;
       }
@@ -386,15 +385,15 @@ struct MPSGraphCache {
 
     dispatch_sync_with_rethrow(serialQueue_, ^() {
       // verify the cached entry doesn't already exist
-      auto it = cache_.find(hash);
-      if (it != cache_.end()) {
-        auto& entry = it->second;
+      if (cache_.count(hash) != 0) {
+        auto& entry = cache_.at(hash);
         TORCH_INTERNAL_ASSERT_DEBUG_ONLY(key == entry.key_, "Key collision in the MPS cached graph!\n");
         cachedGraph = entry.cachedGraph_;
       } else {
         cachedGraph = createCacheBlock();
-        auto inserted = cache_.try_emplace(hash, key, cachedGraph).first;
-        profileCachedGraph(inserted->second);
+        CacheEntry entry(key, cachedGraph);
+        cache_.emplace(hash, entry);
+        profileCachedGraph(entry);
       }
     });
     return cachedGraph;
@@ -411,9 +410,8 @@ struct MPSGraphCache {
     MPSCacheKey hash = std::hash<std::string>{}(key);
 
     dispatch_sync(serialQueue_, ^() {
-      auto it = cache_.find(hash);
-      if (it != cache_.end()) {
-        auto& entry = it->second;
+      if (cache_.count(hash) != 0) {
+        auto& entry = cache_.at(hash);
         TORCH_INTERNAL_ASSERT_DEBUG_ONLY(key == entry.key_, "Key collision in the MPS cached graph!\n");
         cachedGraph = entry.cachedGraph_;
         profileCachedGraph(entry);
@@ -692,7 +690,7 @@ inline bool supportedFloatingOrComplexType(const TensorBase& t) {
 }
 
 inline bool needsGather(const TensorBase& t) {
-  static const bool is_macOS_15_0_or_newer = is_macos_at_least(MacOSVersion::MACOS_15_0);
+  static const bool is_macOS_15_0_or_newer = is_macos_13_or_newer(MacOSVersion::MACOS_VER_15_0_PLUS);
   return !is_macOS_15_0_or_newer && (!t.is_contiguous() || t.storage_offset());
 }
 

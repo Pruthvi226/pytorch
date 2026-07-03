@@ -13,7 +13,6 @@
 #include <memory>
 #include <optional>
 #include <type_traits>
-#include <vector>
 
 // WARNING: be extra careful when including more ATen/c10 header files here!
 // Because AOTInductor generated code will copy-paste this cpp_prefix.h for
@@ -25,7 +24,6 @@
 #include <ATen/NumericUtils.h>
 #include <ATen/core/PhiloxRNGEngine.h>
 
-#include <c10/util/ArrayRef.h>
 #include <c10/util/BFloat16-math.h>
 #include <c10/util/BFloat16.h>
 #include <c10/util/Float8_e4m3fn.h>
@@ -1143,24 +1141,34 @@ inline void transpose_mxn(
 #endif
 
 // NOLINTBEGIN(*-avoid-c-arrays)
-inline std::vector<int64_t> _get_factors(int64_t number) {
-  std::vector<int64_t> factors;
+inline std::tuple<std::shared_ptr<int64_t[]>, int> _get_factors(
+    int64_t number) {
+  int count = 0;
   for (auto i = static_cast<int64_t>(std::sqrt(number)); i > 0; --i) {
     if (number % i == 0) {
-      factors.emplace_back(number / i);
-      factors.emplace_back(i);
+      count += 2;
     }
   }
-  return factors;
+  auto factors = std::shared_ptr<int64_t[]>(new int64_t[count]);
+  int index = 0;
+  for (auto i = static_cast<int64_t>(std::sqrt(number)); i > 0; --i) {
+    if (number % i == 0) {
+      factors[index++] = number / i;
+      factors[index++] = i;
+    }
+  }
+  return std::make_tuple(factors, count);
 }
 
-inline c10::ArrayRef<int64_t> get_factors(int64_t number) {
-  thread_local std::unordered_map<int64_t, std::vector<int64_t>> cache;
+inline std::tuple<std::shared_ptr<int64_t[]>, int> get_factors(int64_t number) {
+  thread_local std::
+      unordered_map<int64_t, std::tuple<std::shared_ptr<int64_t[]>, int>>
+          cache;
   auto [it, inserted] = cache.try_emplace(number);
   if (inserted) {
     it->second = _get_factors(number);
   }
-  return c10::ArrayRef<int64_t>(it->second);
+  return it->second;
 }
 // NOLINTEND(*-avoid-c-arrays)
 
@@ -1204,10 +1212,11 @@ inline void _mm_get_thread_blocking(
   int64_t n_blocks = (N + Nr - 1) / Nr;
   int64_t k_blocks = (K + Kr - 1) / Kr;
 
-  auto factors = get_factors(num_threads);
-  assert(!factors.empty());
+  auto [factors, count] = get_factors(num_threads);
+  assert(count > 0);
 
-  for (int64_t n_factor : factors) {
+  for (int i = 0; i < count; ++i) {
+    int64_t n_factor = factors[i];
     int64_t m_factor = num_threads / n_factor;
     if (n_blocks >= n_factor && m_blocks >= m_factor) {
       auto [Mt_, Nt_, Kt_] =
@@ -1222,11 +1231,13 @@ inline void _mm_get_thread_blocking(
     return;
   }
 
-  for (int64_t k_factor : factors) {
+  for (int i = 0; i < count; ++i) {
+    int64_t k_factor = factors[i];
     if (k_blocks >= k_factor &&
         (max_k_slices == 0 || k_factor <= max_k_slices)) {
-      auto mxn_factors = get_factors(num_threads / k_factor);
-      for (int64_t n_factor : mxn_factors) {
+      auto [mxn_factors, mxn_count] = get_factors(num_threads / k_factor);
+      for (int j = 0; j < mxn_count; ++j) {
+        int64_t n_factor = mxn_factors[j];
         int64_t m_factor = num_threads / (k_factor * n_factor);
         if (n_blocks >= n_factor && m_blocks >= m_factor) {
           auto [Mt_, Nt_, Kt_] = get_blocking(
@@ -1243,7 +1254,8 @@ inline void _mm_get_thread_blocking(
     return;
   }
 
-  for (int64_t n_factor : factors) {
+  for (int i = 0; i < count; ++i) {
+    int64_t n_factor = factors[i];
     int64_t m_factor = num_threads / n_factor;
     if (n_blocks >= n_factor || m_blocks >= m_factor) {
       auto [Mt_, Nt_, Kt_] =

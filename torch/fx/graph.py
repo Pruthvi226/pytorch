@@ -20,6 +20,7 @@ from collections.abc import Callable, Generator, Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Literal, NamedTuple, TYPE_CHECKING
+from typing_extensions import TypeVarTuple, Unpack
 
 import torch
 import torch.utils._pytree as pytree
@@ -72,6 +73,7 @@ _legal_ops = dict.fromkeys(
 # Signature for functions thattransforms the body (`list[str]`) of the
 # generated code
 TransformCodeFunc = Callable[[list[str]], list[str]]
+_InputArgs = TypeVarTuple("_InputArgs")
 
 
 class _CustomBuiltin(NamedTuple):
@@ -471,7 +473,7 @@ class CodeGen:
         else:
             return f"return {repr_fn(output_args)}"
 
-    def process_inputs(self, *args: Any) -> Any:
+    def process_inputs(self, *args: Unpack[_InputArgs]) -> tuple[Unpack[_InputArgs]]:
         """
         Transforms the inputs so that the graph can take them as arguments, as
         non-default codegen may result in the inputs to the function being
@@ -624,16 +626,9 @@ class CodeGen:
                 clsname = add_global(cls.__name__, cls)
                 return f"{clsname}.{arg.name}"
             elif isinstance(arg, complex):
-                if (
-                    arg.real == 0.0
-                    or arg.imag == 0.0
-                    or not math.isfinite(arg.real)
-                    or not math.isfinite(arg.imag)
-                ):
+                if arg.real == 0.0 or arg.imag == 0.0:
                     # complex.__repr__ is not a safe source representation for
                     # signed zero components, e.g. eval("(-0-1j)") loses the sign.
-                    # It's also unsafe for nan/inf imaginary parts: repr produces
-                    # "nanj"/"infj" which Python parses as a single identifier.
                     return f"complex({_get_repr(arg.real)}, {_get_repr(arg.imag)})"
                 return blue(repr(arg))
             elif isinstance(arg, torch.Tensor):

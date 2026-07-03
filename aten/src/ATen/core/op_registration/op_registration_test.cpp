@@ -2219,6 +2219,25 @@ TEST(OperatorRegistrationTest, TestSymSymRefCompatibility) {
   }, "doesn't match the expected function schema");
 }
 
+Tensor symint_arrayref_op(
+    const Tensor& self,
+    const c10::SymIntArrayRef& size) {
+  return self.clone();
+}
+
+TEST(OperatorRegistrationTest, TestSymIntArrayRefRefCompatibilityErrorHint) {
+  auto m = MAKE_TORCH_LIBRARY(_test);
+  m.def("_test::symint_arrayref_op(Tensor self, SymInt[] size) -> Tensor");
+  auto m_cpu = MAKE_TORCH_LIBRARY_IMPL(_test, CPU);
+
+  expectThrows<c10::Error>([&] {
+    m_cpu.impl(
+        "symint_arrayref_op",
+        c10::DispatchKey::CPU,
+        TORCH_FN(symint_arrayref_op));
+  }, "SymIntArrayRef kernel arguments must be passed by value");
+}
+
 }
 
 #pragma GCC diagnostic pop

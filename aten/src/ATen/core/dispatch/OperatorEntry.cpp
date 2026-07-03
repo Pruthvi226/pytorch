@@ -19,6 +19,33 @@ namespace {
       return "(catch all)";
     }
   }
+
+  bool isSymIntLikeType(const TypePtr& type) {
+    return *type == *getTypePtr<c10::SymInt>() ||
+        *type == *getTypePtr<std::optional<c10::SymInt>>() ||
+        *type == *getTypePtr<c10::SymIntArrayRef>() ||
+        *type == *getTypePtr<at::OptionalSymIntArrayRef>();
+  }
+
+  std::string formatInvalidSymIntKernelHint(
+      const FunctionSchema& from_def,
+      const FunctionSchema& inferred,
+      const KernelFunction& kernel) {
+    if (kernel.isValidSymUnboxed() ||
+        from_def.arguments().size() != inferred.arguments().size()) {
+      return "";
+    }
+    for (const auto i : c10::irange(from_def.arguments().size())) {
+      if (isSymIntLikeType(from_def.arguments()[i].real_type()) &&
+          isSymIntLikeType(inferred.arguments()[i].real_type())) {
+        return "\n  note: SymInt, SymIntArrayRef, optional SymInt, and "
+               "optional SymIntArrayRef kernel arguments must be passed by "
+               "value. For example, use c10::SymIntArrayRef instead of "
+               "const c10::SymIntArrayRef&.";
+      }
+    }
+    return "";
+  }
 #endif
 }
 
@@ -95,6 +122,12 @@ namespace {
     FunctionSchema inferred = inferred_.cloneWithRealTypes();
     std::optional<std::string> schema_difference = findSchemaDifferences(from_def, inferred);
     if (schema_difference.has_value()) {
+      const std::string invalid_symint_kernel_hint =
+#ifndef STRIP_ERROR_MESSAGES
+          formatInvalidSymIntKernelHint(from_def_, inferred_, kernel);
+#else
+          "";
+#endif
       TORCH_CHECK(false,
         "Inferred operator schema for a C++ kernel function doesn't match the expected function schema.\n"
         "  operator: ", toString(name), "\n",
@@ -102,7 +135,8 @@ namespace {
         "    ", from_def_debug, "\n",
         "  inferred schema: ", toString(inferred), "\n",
         "    ", inferred_debug, "\n",
-        "  reason: ", *schema_difference);
+        "  reason: ", *schema_difference,
+        invalid_symint_kernel_hint);
     }
   }
 } // anonymous namespace

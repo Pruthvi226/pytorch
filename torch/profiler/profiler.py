@@ -544,7 +544,6 @@ class _KinetoProfile:
         group_by_input_shape: bool = False,
         group_by_stack_n: int = 0,
         group_by_overload_name: bool = False,
-        include_python_functions: bool = False,
     ):
         """Averages events, grouping them by operator name and (optionally) input shapes, stack
         and overload name.
@@ -560,10 +559,7 @@ class _KinetoProfile:
                 "Profiler must be initialized before getting key averages"
             )
         return self.profiler.key_averages(
-            group_by_input_shape,
-            group_by_stack_n,
-            group_by_overload_name,
-            include_python_functions,
+            group_by_input_shape, group_by_stack_n, group_by_overload_name
         )
 
     def events(self):

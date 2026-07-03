@@ -34,9 +34,9 @@ from torch._inductor.test_case import run_tests, TestCase
 from torch._inductor.utils import run_and_get_code
 from torch._inductor.virtualized import V
 from torch._library.opaque_object import (
-    CustomClassBase,
     get_opaque_type_name,
-    register_custom_class,
+    OpaqueBase,
+    register_opaque_type,
 )
 from torch.fx.experimental.proxy_tensor import make_fx
 from torch.testing import FileCheck
@@ -55,7 +55,7 @@ from torch.utils import _pytree as pytree
 aten = torch.ops.aten
 
 
-class OpaqueScaleFactor(CustomClassBase):
+class OpaqueScaleFactor(OpaqueBase):
     def __init__(self, val):
         self.val = val
 
@@ -72,7 +72,7 @@ class OpaqueScaleFactor(CustomClassBase):
         )
 
 
-register_custom_class(OpaqueScaleFactor, typ="constant", hoist=True)
+register_opaque_type(OpaqueScaleFactor, typ="value", hoist=True)
 
 
 @instantiate_parametrized_tests
@@ -1682,7 +1682,7 @@ class TestPatternMatcher(TestCase):
                 self.assertEqual(
                     pattern_pp,
                     PatternPrettyPrinter.run(search_fn_pattern),
-                    msg=lambda msg: f"{msg}\nFound mismatched pattern {search_fn.__name__}. Run torchgen/fuse/gen_patterns.py",
+                    msg=f"Found mismatched pattern {search_fn.__name__}. Run torchgen/fuse/gen_patterns.py",
                 )
 
                 # Since we've already checked that the serialized patterns match
@@ -2678,14 +2678,12 @@ class TestPatternMatcher(TestCase):
         ):
             node = next(node for node in gm.graph.nodes if node.target == target)
             self.assertEqual(
-                node.meta.get("stack_trace"),
-                stack_trace,
-                msg=lambda msg: f"{msg}\n{target}: {node.meta}",
+                node.meta.get("stack_trace"), stack_trace, msg=f"{target}: {node.meta}"
             )
             self.assertEqual(
                 node.meta.get("source_fn_stack"),
                 source_fn_stack,
-                msg=lambda msg: f"{msg}\n{target}: {node.meta}",
+                msg=f"{target}: {node.meta}",
             )
 
         expected_metadata = {
@@ -2696,24 +2694,16 @@ class TestPatternMatcher(TestCase):
         for target, (shape, dtype) in expected_metadata.items():
             node = next(node for node in gm.graph.nodes if node.target == target)
             self.assertEqual(
-                node.meta["val"].shape,
-                shape,
-                msg=lambda msg: f"{msg}\n{target}: {node.meta}",
+                node.meta["val"].shape, shape, msg=f"{target}: {node.meta}"
             )
             self.assertEqual(
-                node.meta["val"].dtype,
-                dtype,
-                msg=lambda msg: f"{msg}\n{target}: {node.meta}",
+                node.meta["val"].dtype, dtype, msg=f"{target}: {node.meta}"
             )
             self.assertEqual(
-                node.meta["tensor_meta"].shape,
-                shape,
-                msg=lambda msg: f"{msg}\n{target}: {node.meta}",
+                node.meta["tensor_meta"].shape, shape, msg=f"{target}: {node.meta}"
             )
             self.assertEqual(
-                node.meta["tensor_meta"].dtype,
-                dtype,
-                msg=lambda msg: f"{msg}\n{target}: {node.meta}",
+                node.meta["tensor_meta"].dtype, dtype, msg=f"{target}: {node.meta}"
             )
 
     def test_metadata_propagation_register_replacement(self):

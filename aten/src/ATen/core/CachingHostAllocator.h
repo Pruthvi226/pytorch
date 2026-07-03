@@ -432,7 +432,9 @@ struct CachingHostAllocatorImpl {
 
   void free_from_pool(BlockPool &pool) {
     for (size_t i = 0; i < pool.free_list_.size(); ++i) {
-      std::scoped_lock lock(pool.free_list_[i].mutex_, pool.blocks_mutex_);
+      std::lock(pool.free_list_[i].mutex_, pool.blocks_mutex_);
+      std::lock_guard<std::mutex> gf(pool.free_list_[i].mutex_, std::adopt_lock);
+      std::lock_guard<std::mutex> gb(pool.blocks_mutex_, std::adopt_lock);
 
       std::vector<B*> blocks_to_remove(pool.free_list_[i].list_.begin(),
                                        pool.free_list_[i].list_.end());
@@ -498,8 +500,12 @@ struct CachingHostAllocatorImpl {
     // free list mutexes and the blocks mutex. Previously, this was only done in
     // empty_cache function.
     for (size_t i = 0; i < default_pool_.free_list_.size(); ++i) {
-      std::scoped_lock lock(
+      std::lock(
           default_pool_.free_list_[i].mutex_, default_pool_.blocks_mutex_);
+      std::lock_guard<std::mutex> gf(
+          default_pool_.free_list_[i].mutex_, std::adopt_lock);
+      std::lock_guard<std::mutex> gb(
+          default_pool_.blocks_mutex_, std::adopt_lock);
 
       // We collect the slow-path stats only once, since they are not collected
       // per bucket (we pick index 0 arbitrarily). These are also all the host
@@ -534,8 +540,12 @@ struct CachingHostAllocatorImpl {
     // free list mutexes and the blocks mutex. Previously, this was only done in
     // empty_cache function.
     for (size_t i = 0; i < default_pool_.free_list_.size(); ++i) {
-      std::scoped_lock lock(
+      std::lock(
           default_pool_.free_list_[i].mutex_, default_pool_.blocks_mutex_);
+      std::lock_guard<std::mutex> gf(
+          default_pool_.free_list_[i].mutex_, std::adopt_lock);
+      std::lock_guard<std::mutex> gb(
+          default_pool_.blocks_mutex_, std::adopt_lock);
 
       if (i == 0) {
         stats_.allocations.reset_accumulated();
@@ -560,8 +570,12 @@ struct CachingHostAllocatorImpl {
     // free list mutexes and the blocks mutex. Previously, this was only done in
     // empty_cache function.
     for (size_t i = 0; i < default_pool_.free_list_.size(); ++i) {
-      std::scoped_lock lock(
+      std::lock(
           default_pool_.free_list_[i].mutex_, default_pool_.blocks_mutex_);
+      std::lock_guard<std::mutex> gf(
+          default_pool_.free_list_[i].mutex_, std::adopt_lock);
+      std::lock_guard<std::mutex> gb(
+          default_pool_.blocks_mutex_, std::adopt_lock);
 
       if (i == 0) {
         stats_.allocations.reset_peak();
@@ -721,7 +735,9 @@ struct CachingHostAllocatorImpl {
     auto index = size_index(size);
 
     if (size > pinned_max_cached_size()) {
-      std::scoped_lock lock(pool.free_list_[index].mutex_, pool.blocks_mutex_);
+      std::lock(pool.free_list_[index].mutex_, pool.blocks_mutex_);
+      std::lock_guard<std::mutex> gf(pool.free_list_[index].mutex_, std::adopt_lock);
+      std::lock_guard<std::mutex> gb(pool.blocks_mutex_, std::adopt_lock);
       destroy_block(block, pool, /*is_active=*/true);
     } else {
       std::lock_guard<std::mutex> g(pool.free_list_[index].mutex_);
